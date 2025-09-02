@@ -1,0 +1,17 @@
+# RStudio files
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+
+# Temporary files
+.DS_Store
+Thumbs.db
+
+# Output / cache
+*.Rout
+*.Rproj
+*.log
+*.aux
+*.out
+*.toc

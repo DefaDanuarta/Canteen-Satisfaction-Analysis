@@ -1,6 +1,0 @@
-"0","get_mode <- function(v) {"
-"0","  uniqv <- na.omit(unique(v))"
-"0","  uniqv[which.max(tabulate(match(v, uniqv)))]"
-"0","}"
-"0",""
-"0","df$major[is.na(df$major)] <- get_mode(df$major)"

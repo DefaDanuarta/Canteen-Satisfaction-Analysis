@@ -1,4 +1,0 @@
-"0",""
-"0","#export to csv file"
-"0","export_scores_df <- df"
-"0","write.csv(export_scores_df, ""3rd_avg_scores_added_questionnaire_results.csv"", row.names = FALSE)"

@@ -1,5 +1,0 @@
-"0","#cat(""Unique value for frequency of respondent visit canteen: "", paste(unique(df$frequency_visiting_canteen), collapse = "", ""), ""\n"")"
-"0","cat(""Unique value for every likert scale: "", paste(unique(df$friendly_staff), collapse = "", ""))"
-"1","Unique value for every likert scale: "
-"1"," "
-"1","setuju, sangat setuju, sangat tidak setuju, tidak setuju, tidak merasakan"

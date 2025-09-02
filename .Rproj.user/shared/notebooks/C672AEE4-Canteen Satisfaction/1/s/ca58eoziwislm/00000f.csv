@@ -1,1 +1,0 @@
-"0","df$mean_satisfaction_score <- rowMeans(df[likert_cols], na.rm = TRUE)"

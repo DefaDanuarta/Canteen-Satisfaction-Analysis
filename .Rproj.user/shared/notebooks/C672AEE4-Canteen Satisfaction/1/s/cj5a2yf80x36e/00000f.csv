@@ -1,7 +1,0 @@
-"0","df <- na.omit(dirty_df)"
-"0",""
-"0","sum(is.na(df$home_campus))"
-"1","[1]"
-"1"," 0"
-"1","
-"

@@ -1,2 +1,0 @@
-"0","#head(df %>% select(ID, major, date, start_time, completion_time, duration))"
-"0","datatable(df %>% select(ID, major, date, start_time, completion_time, duration), caption = ""Separated Timestamp"")"

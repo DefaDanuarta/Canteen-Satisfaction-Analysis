@@ -112,11 +112,7 @@ likert_cols <- df %>% select(where(is.character),
                              -c(major, 
                                 active_mobility, 
                                 home_campus, 
-                                frequency_visiting_canteen, 
-                                advice_for_services, 
-                                cleanliness_advice, 
-                                facility_advice, 
-                                product_advice
+                                frequency_visiting_canteen
                                 )) %>% names()
 ```
 

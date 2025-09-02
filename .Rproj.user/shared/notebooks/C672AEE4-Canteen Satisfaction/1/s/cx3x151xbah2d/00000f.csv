@@ -1,0 +1,4 @@
+"0","deleted_column <- c(""advice_for_services"", ""cleanliness_advice"", ""facility_advice"", ""product_advice"")"
+"0",""
+"0","df <- df %>% "
+"0","  select(-deleted_column)"

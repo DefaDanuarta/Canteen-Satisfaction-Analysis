@@ -1,0 +1,2 @@
+"0","#head(temporary %>% select(start_time, completion_time))"
+"0","datatable(temporary %>% select(start_time, completion_time), caption = ""Default Timestamp"")"

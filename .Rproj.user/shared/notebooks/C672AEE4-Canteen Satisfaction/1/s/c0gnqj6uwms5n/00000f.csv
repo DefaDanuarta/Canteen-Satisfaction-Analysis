@@ -1,0 +1,4 @@
+"0","#extract every variable to a new df based on their aspect"
+"0","services_df <- df_stats %>% filter(aspect ==""service"")"
+"0","cleanliness_df <- df_stats %>% filter(aspect ==""cleanliness"")"
+"0","product_df <- df_stats %>% filter(aspect ==""product"")"

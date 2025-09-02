@@ -1,0 +1,2 @@
+"0","#head(df %>% select(ID, major, mean_satisfaction_score, satisfaction_category))"
+"0","datatable(df %>% select(ID, major, frequency_visiting_canteen, mean_satisfaction_score, satisfaction_category), caption = ""Binning Mean Satisfaction Score Result"")"

@@ -1,0 +1,534 @@
+---
+title: "FinalExam-2702331990-I Kadek Defa Danuarta"
+author: "I Kadek Defa Danuarta"
+date: "2025-06-20"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+```
+
+# **Final Exam Answers** {.tabset}  
+
+---
+The explanations is presented here: https://drive.google.com/file/d/1EIRjpQgk-5akicsHpJswuADWmmRXHi4C/view?usp=sharing
+
+This page contains several tabs to answer some case questions, where the attached tabs are as follows:  
+
+<!-- **Importing Dataset & Library (if needed)** -->
+```{r}
+library(ggplot2)
+library(plotly)
+library(dplyr) # used to preprocess
+library(e1071) # used to check skewness
+library(rcompanion) # used to calculate with Cramer's v
+```
+
+```{r}
+real_df <- read.csv("data_C.csv")
+df <- real_df
+```
+
+## **Data Quality and Preprocessing**  
+Several errors in this data need to be resolved, referring to:  
+1. Find Missing Values  
+2. Find Duplicated Records/Data  
+3. Inconsistent or unknown categories  
+4. Outliers or extreme values  
+5. Noisy or irrelevant values
+
+### **Missing Value**
+```{r}
+colSums(is.na(df))
+```
+In this dataset, there is only one features that has a missing values. Which this refers to **`r names(df)[colSums(is.na(df)) > 0]`** with amount of **`r colSums(is.na(df))[colSums(is.na(df)) > 0]`** missing values  
+
+These are the index that has a missing value in feature 'duration'
+```{r}
+# index = c(which(is.na(df$duration)))
+# print(df[index, ])
+
+which(is.na(df$duration))
+```
+
+#### **Handling Missing Value**
+For the handling missing value, I will delete the records that has missing value in 'duration'. This action is done in order to remove missing value records from dataset and the easiest way to handle missing value (since the dimension of data is large)(dimension : `r dim(df)`).
+```{r}
+df <- na.omit(df)
+
+colSums(is.na(df))
+```
+
+
+### **Duplicated Records**
+Duplicated record in this data (use `sum(duplicated(df))`): `r sum(duplicated(df))`
+```{r}
+sum(duplicated(df))
+```
+By far, the duplicated values doesn't exist in this data set, perhaps this is caused by the inconsistent of some labels.  
+
+### **Inconsistent or unknown categories**
+```{r}
+#cat_features <- sapply(df, is.character)
+#for (col in names(df)[cat_features]){
+  #cat("Unique value in ", col, " : \n")
+  #print(unique(df[[col]]))
+  #cat("\n")
+#}
+
+cat("Unique value in 'Job' before cleaning : \n")
+print(unique(df$job))
+cat("Unique value in 'marital' before cleaning : \n")
+print(unique(df$marital))
+```
+
+**Problems Indicated in Categorical Features**  
+From the very begining of the result above, it already tells unique value in every categorical features. Some of the features is clear from inconsistent (e.g. "y", "default", "month"), and some of them are not (e.g."job", "marital"). These inconsistent value need to be fixed for label encode.
+
+_Need to do:_  
+1. Fix unique value in "job" (there is "")  
+2. Fix unique value in "marital" (it has to be only "single", "married", and "divorced")
+
+##### **Handling Inconsistent Categories**
+Inconsistent categories are found in feature "job" and "marital" where in this case I will make "" to be an "unknown", and "admin." to be an "admin" categories in "job" feature. For feature "marital", there is "unknown" category where in this case I will turn it into null or NA.
+```{r}
+df$job[df$job == ""] <- "unknown"
+df$job[df$job == "admin."] <- "admin"
+
+df$marital[df$marital == "unknown"] <- NA
+
+cat("Unique Value in 'Job': \n")
+print(unique(df$job))
+cat("Unique Value in 'Marital': \n")
+print(unique(df$marital))
+cat("But now, marital have a missing value in :", sum(is.na(df$marital)), "Records\n")
+
+df <- na.omit(df)
+
+cat("After deleting missing value in marital :", sum(is.na(df$marital)), "NA Records")
+```
+As we can see on the result above, the unique value in job feature is already cleaned from inconsistent value. Followed by the marital status where I changed the "unknown" status to be a null value or NA (this is done, because marital status only single, married, and divorced), the missing values will be cleaned with deleting it.
+
+### **Outliers or extreme values**  
+In this section, I Will identify some of the outliers in numerical features and try to handle the problems
+```{r}
+detect_outliers <- function(x) {
+  Q1 <- quantile(x, 0.25, na.rm=TRUE)
+  Q3 <- quantile(x, 0.75, na.rm=TRUE)
+  IQR <- Q3 - Q1
+  lower <- Q1 - 1.5 * IQR
+  upper <- Q3 + 1.5 * IQR
+  return(which(x < lower | x > upper))
+}
+
+outliers_age <- detect_outliers(df$age)
+outliers_duration <- detect_outliers(df$duration)
+outliers_campaign <- detect_outliers(df$campaign)
+outliers_pdays <- detect_outliers(df$pdays)
+outliers_previous <- detect_outliers(df$previous)
+
+cat("Outliers in age: ", length(outliers_age), "\n")
+cat("Outliers in duration: ", length(outliers_duration), "\n")
+cat("Outliers in campaign: ", length(outliers_campaign), "\n")
+cat("Outliers in pdays: ", length(outliers_pdays), "\n")
+cat("Outliers in previous: ", length(outliers_previous), "\n")
+```
+**Assumption Behind This outliers:**  
+1. Age => Still looks normal, this outliers might be indicated caused by population of data is below 80.  
+2. Duration => These might be caused by the difference of data where the range is too big (e.g. 0 to 1000 or more).  
+3. Campaign => These outliers might be there are people that have been re-contacted many times.  
+4. Pdays => Value of 999 is causing the outlier, this data shall not be deleted because it'll be used in other cases.  
+5. Previous => This might be caused because the majority is 0  
+
+#### **Handling Outliers**{.tabset} 
+##### **Age**  
+In this case, i will identify the consistency of age distribution.
+```{r age-plot-before, fig.width=5, fig.height=7}
+age_dist_before <- ggplot(df, aes(x = "", y = age)) +
+  geom_boxplot(fill = "steelblue", color = "black") +
+  labs(
+    title = "Distribution of 'age' Before Handled",
+    x = "Age",
+    y = "Years"
+  ) +
+  theme_minimal()
+
+ggplotly(age_dist_before)
+```
+From the boxplot above, we can see that the distribution of age feature have a minimum value of 17. Where this mean the youngest person in this data set is 17th years old. The range of age in this population is around 32 y.o. until around 47 y.o.  
+
+Even there were 84 data detected as outliers in age feature, after I look up for it, these values were still within a reasonable range (with a maximum age of 98 years and retired job status). Since there were no values that appeared to be incorrect or inconsistent with the context, all data in the age column was retained without deletion.
+
+##### **Duration**  
+In this case, i will identify the consistency of duration.
+duration => Duration of the last contact in seconds
+```{r duration-plot-before, fig.width=5, fig.height=7}
+duration_dist_before <- ggplot(df, aes(x = "", y = duration)) +
+  geom_boxplot(fill = "steelblue", color = "black") +
+  labs(
+    title = "Distribution of 'duration' (in seconds) Before Handled",
+    x = "Duration",
+    y = "Seconds"
+  ) +
+  theme_minimal()
+
+ggplotly(duration_dist_before)
+```
+From the result above, the IQR of duration (in second) are started at around 103 seconds to around 324 seconds. This indicates the most consistent duration is in the range of those values and in median of 183 seconds.
+
+```{r}
+Q1 <- quantile(df$duration, 0.25)
+Q3 <- quantile(df$duration, 0.75)
+IQR_val <- Q3 - Q1
+lower_bound <- Q1 - 1.5 * IQR_val
+upper_bound <- Q3 + 1.5 * IQR_val
+
+df$duration <- ifelse(df$duration < lower_bound, lower_bound,
+                      ifelse(df$duration > upper_bound, upper_bound, df$duration))
+cat("Q1: ", Q1, "Seconds\n")
+cat("Q3: ", Q3, "Seconds\n")
+```
+To handle the effect of extreme values in the duration variable, I used a winsorization technique. Based on the interquartile range (IQR), values below `r cat(Q1)` or above `r cat(Q3)` were replaced with the respective lower and upper bounds. 
+
+```{r duration-plot-after, fig.width=5, fig.height=7}
+duration_dist_after <- ggplot(df, aes(x = "", y = duration)) +
+  geom_boxplot(fill = "steelblue", color = "black") +
+  labs(
+    title = "Distribution of 'duration' (in seconds) After Handled",
+    x = "Duration",
+    y = "Seconds"
+  ) +
+  theme_minimal()
+
+ggplotly(duration_dist_after)
+```
+
+As shown from boxplot above, the duration values were limited to between approximately 103 seconds (Q1) and 655 seconds (Q3), with a median value of 183 seconds. This transformation keeping the general shape of the distribution and sample size, but reduced the impact of outliers on prediction analysis.
+
+##### **Campaign**  
+```{r campaign-plot-before, fig.width=5, fig.height=7}
+campaign_dist_before <- ggplot(df, aes(x = "", y = campaign)) +
+  geom_boxplot(fill = "steelblue", color = "black") +
+  labs(
+    title = "Distribution of 'Campaign' Before Handled",
+    x = "Campaign",
+    y = "Seconds"
+  ) +
+  theme_minimal()
+
+ggplotly(campaign_dist_before)
+```
+Campaign => number of contacts made during the current campaign.  
+The majority of contacts fall between 1 times until around 3 times. But there are some people that have been contacted more than 6 times, where it indicates an aggressive outreach or call spams (based on max value of 43). In this case I'll try to impute the outliers, since the outliers are on 487 records, it is unfortunate to be deleted. 
+
+```{r imputing-campaign}
+Q1 <- quantile(df$campaign, 0.25)
+Q3 <- quantile(df$campaign, 0.75)
+IQR_val <- Q3 - Q1
+upper_fence <- Q3 + 1.5 * IQR_val
+
+df$campaign <- ifelse(df$campaign > upper_fence, upper_fence, df$campaign)
+```
+For imputation, I used the same winsorization technique. This is done because campaign record data need to be maintained that might be helpful in analysis. It also ensures the data remains reasonable, as contacting a client more than six times during a campaign can be considered excessive or even spam.
+```{r campaign-plot-after, fig.width=5, fig.height=7}
+campaign_dist_after <- ggplot(df, aes(x = "", y = campaign)) +
+  geom_boxplot(fill = "steelblue", color = "black") +
+  labs(
+    title = "Distribution of 'Campaign' After Handled",
+    x = "Campaign",
+    y = "Seconds"
+  ) +
+  theme_minimal()
+
+ggplotly(campaign_dist_after)
+```
+As we can see on the graph above, the campaign outliers has been fully imputed.  
+
+### **Noisy or irrelevant values**
+To handle noisy and irrelevant values, I clean up inconsistent entries in categorical variables. Empty string values in the job column were replaced with "unknown". Additionally, I've reviewed columns such as X (row index) and removed them from the dataset due to irrelevance to the analysis objective.  
+```{r}
+df$X <- NULL
+```
+Here, I want to check the pdays variable, which is a feature related to the number of days since the last contact in a previous campaign.
+```{r, fig.width=5, fig.height=7}
+pdays_outlier <- ggplot(df[df$pdays < 50, ], aes(x = "", y = pdays)) +
+  geom_boxplot(fill = "steelblue", color = "black") +
+  labs(
+    title = "Distribution of 'pdays' (Filtered: < 50 days)",
+    x = "",
+    y = "pdays"
+  ) +
+  theme_minimal()
+
+ggplotly(pdays_outlier)
+```
+From the boxplot above, it show a distribution of pdays, where the data is filtered to less than 50 days. Because pdays feature will be used in next case i'll keep this feature without any changes.
+
+
+
+### **Cleaned version of data frame and Statistics**{.tabset}
+```{r}
+clean_df <- df
+
+str(clean_df)
+```
+From the result above,I'm already success to clean dataframes and now continue to Summary statistics and initial exploration.  
+
+#### **Central tendency and variability**  
+```{r}
+numeric_cols <- names(df)[sapply(df, is.numeric)]
+
+for (col in numeric_cols) {
+  cat("=== Statistic for :", col, "===\n")
+  cat("Mean:", mean(clean_df[[col]], na.rm = TRUE), "\n")
+  cat("Median:", median(clean_df[[col]], na.rm = TRUE), "\n")
+  cat("Standar Deviasi:", sd(clean_df[[col]], na.rm = TRUE), "\n")
+  cat("Varians:", var(clean_df[[col]], na.rm = TRUE), "\n")
+  cat("Min:", min(clean_df[[col]], na.rm = TRUE), "\n")
+  cat("Max:", max(clean_df[[col]], na.rm = TRUE), "\n")
+  cat("Range:", diff(range(clean_df[[col]], na.rm = TRUE)), "\n")
+  cat("\n")
+}
+```
+- **Age:** The average age (mean) was around 40 years, with a median of 38 years. The standard deviation was around 10.3, indicating moderate variation. Participants' ages ranged from 17 to 98 years, with a total range of 81 years.  
+- **Duration:** The average call duration was 238 seconds, while the median was 183 seconds. The high standard deviation of 180 seconds and maximum of 655.5 seconds indicates significant variation in call duration.  
+- **Campaign:** On average, clients were contacted about 2.27 times, with a median of 2 contacts. The standard deviation is 1.54, showing some variability, while the number of contacts ranges from 1 to 6.  
+- **Pdays:** This variable has a mean of 962 and a median of 999. The standard deviation is 187, and the values range from 0 to 999, reflecting that many clients have never been contacted before (coded as 999) or have just been contacted.  
+- **Previous:** The number of previous contacts before the current campaign was quite low, with an average of 0.17 and a median of 0, indicating that most clients had no previous contacts. The standard deviation was 0.48, and the values ranged from 0 to 6, again indicating that only a few had multiple contacts.
+
+#### **Summary table**
+This summary table contains stats between category where in this case I choose summary of age it has on every education levels
+```{r}
+edu_summary <- clean_df %>%
+  group_by(education) %>%
+  summarise(
+    count = n(),
+    avg_age = mean(age, na.rm = TRUE),
+  ) %>%
+  arrange(desc(count))
+
+print(edu_summary)
+```
+Most customers have a university degree (2,449), followed by high school (1,895). These two categories make up the largest portion of the dataset.  
+Customers with basic education (4 years) and those who are illiterate tend to be older, with an average age of 47.6 and 48 years, respectively. This might indicate that these groups include more retired individuals or older adults.
+
+
+## **Relationship Analysis**  
+For this case I am asked to:  
+1. Explore variable relationships  
+2. Feature engineering  
+3. Interactive visualizations of relationships  
+
+### **Explore variable relationships**  
+For this section, I was asked to select three variables that could influence the outcome of the campaign (y). The y value from categorical need to be encoded to 0 and 1 in order to count the corelation of features to y variable.
+```{r encoded-y-value}
+clean_df$y_encoded <- ifelse(clean_df$y == "yes", 1, 0)
+```
+After encode the y value to numeric from categorical, now I'll check the skewness of the numerical features to determine the correlation method.  
+
+
+#### **Checking skewness** 
+```{r skewness-check}
+numeric_data <- clean_df %>%
+  select(where(is.numeric))
+
+skewness_result <- sapply(numeric_data, skewness, na.rm = TRUE)
+
+print(skewness_result)
+```
+Almost all variables do not have a normal distribution. To measure the relationship between these numerical variables and y, it is more recommended to use Spearman correlation.  
+
+
+#### **Calculate corelation using spearman**  
+```{r spearman-corelation-numeric}
+cor_matrix_spearman <- cor(numeric_data, method = "spearman", use = "complete.obs")
+
+cor_with_y <- cor_matrix_spearman[ , "y_encoded"]
+round(cor_with_y, 3)
+```
+From the results above, duration has a highest positive correlation (r = 0.351) between all numerical features with the subscription outcome. This might be indicates that the longer the phone call, the higher the chance of a client subscribing.  
+
+#### **Calculate corelation for categorical features using Cramer's V**  
+```{r}
+cat_vars <- c("job", "marital", "education", "default", "housing", "loan", 
+              "contact", "month", "day_of_week", "poutcome")
+
+cramer_results <- sapply(cat_vars, function(x) {
+  as.numeric(cramerV(table(clean_df[[x]], clean_df$y)))
+})
+
+cramer_df <- data.frame(
+  variable = names(cramer_results),
+  cramers_v = as.numeric(round(cramer_results, 3)) 
+)
+cramer_df <- cramer_df %>% arrange(desc(cramers_v))
+
+print(cramer_df)
+```
+
+**Result for correaltions:**  
+These are top 3 highest features correlation:  
+1. duration (with spearman) = 0.351  
+2. poutcome (with cramer's v) = 0.298  
+3. month (with cramer's v) = 0.272  
+
+#### **Calculate cross tabulation between 2 categorical features**  
+Calculate the cross tabulation between the ordinal education feature and the nominal 'y' feature to check the proportion of the number of people subscribed (yes) from different levels of education.
+```{r}
+edu_tab <- table(clean_df$education, clean_df$y)
+prop_edu <- prop.table(edu_tab, margin = 1)
+round(prop_edu * 100, 1)
+```
+The results above show that most people with higher education, such as professional course or a university degree, chose “yes.” This shows that people with higher levels of education are generally more open to information in campaigns.  
+
+### **Feature engineering**  
+In this section, I am tasked with making three new variables.  
+
+#### **Age Group**   
+```{r}
+clean_df$age_group <- cut(clean_df$age,
+                          breaks = c(-Inf, 30, 50, Inf),
+                          labels = c("<30", "30-50", ">50"))
+```
+The Unique values from new variables `age_group` are: `r unique(clean_df$age_group)`  
+
+#### **Recency Level**  
+Level of recency since last contact with customer  
+```{r}
+clean_df$recency_level = case_when(
+      clean_df$pdays == 0          ~ "never",
+      clean_df$pdays <= 30          ~ "recent",
+      clean_df$pdays > 30           ~ "old"
+    ) %>% factor(levels = c("never", "recent", "old"))
+```
+The Unique values from new variables `recency_level` are: `r unique(clean_df$recency_level)`  
+This values are based on a 30-day period.  
+
+#### **Total Contact Score**  
+Total frequency of contact made to customers before and during the current campaign  
+```{r}
+clean_df$total_contact_score <- df$campaign + df$previous
+```
+This variable is made with sum of frequency campaign and previous.  
+To proof the code is successfully run, the mean of `total_contact_score` is: `r round(mean(clean_df$total_contact_score), 3)`.  
+
+
+### **Interactive visualizations of relationships**
+#### **A chart comparing two categorical variables**  
+```{r, default-vs-y, fig.width=7, fig.height=5}
+pout_vs_y <- ggplot(clean_df, aes(x = poutcome, fill = y)) +
+  geom_bar(position = "fill", color = "black") +
+  scale_y_continuous(labels = scales::percent) +
+  labs(
+    title = "Proportion of Subscription by Previous Outcome Status",
+    x = "Previous Outcome Status",
+    y = "Proportion of Subscribed"
+  )+
+  theme_minimal()
+
+ggplotly(pout_vs_y)
+```
+A stacked bar chart showing the percentage of clients who subscribed (green) vs. did not subscribe (red) for each category of previous campaign results. It can be seen that clients with “success” status have the highest subscription rate (~61%), while ‘failure’ and “nonexistent” have very low subscription rates (~15% and ~8%).
+
+
+#### **A chart comparing one numeric and one categorical**  
+```{r education-majority, fig.width=7, fig.height=5}
+edu_major <- ggplot(edu_summary, aes(x = education, y = count, fill = avg_age)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(
+    title = "Majority of Education with Average Age",
+    x = "Education Level",
+    y = "Counts"
+  ) +
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplotly(edu_major)
+```
+A bar chart showing the number of clients by education level, with the color of the bars indicating the average age of each group. “University degree” has the highest number of clients (~2449) with an average age of around 38, followed by “high school” (~1895 clients). Higher education levels tend to have higher average ages, as indicated by the darker colors.
+
+
+#### **A multi-dimensional chart**  
+```{r age-vs-duration-baseon-y, fig.width=7, fig.height=5}
+age_vs_dur <- ggplot(clean_df, aes(x = age_group, y = duration, fill = y)) +
+  geom_boxplot(position = "dodge") +
+  labs(
+    title = "Call Duration by Age Group and Subscription Status",
+    x = "Age Group",
+    y = "Call Duration (seconds)",
+    fill = "Subscribed?"
+  ) +
+  scale_fill_manual(values = c("no" = "gray", "yes" = "seagreen")) +
+  theme_minimal()
+
+ggplotly(age_vs_dur)
+```
+
+**Not Subscribed (Grey):** Showing consistent call duration patterns across all age groups (<30, 30-50, >50). The median call duration ranges from approximately 160-168 seconds with relatively similar variations. There are outliers reaching up to 655.50 seconds in all age groups, indicating some very long calls despite unsuccessful conversions.  
+
+**Subscribed (Green):** Shows a longer total call duration compared to Not Subscribed. The 30-50 age group has the highest median duration (around 554 seconds), while the under-30 age group has a lower median duration (around 412 seconds), followed by the over-50 age group with the lowest median duration (around 359 seconds). 
+
+
+## **Insight Storytelling and Recommendations**  
+For this section, I am tasked to present my insight to non-technical stakeholders  
+
+### **Data storytelling through visual design**  
+Based on the data provided, I found several important keys based on correlation values. There are three important keys that influence customer interest in chosing yes are as follows:  
+1. duration of phone call with customer (with spearman) = 0.351  
+2. poutcome is the previous campaign outcome (with cramer's v) = 0.298  
+3. month of the last contact (with cramer's v) = 0.272  
+
+#### **Average Call Duration by Previous Outcome based on Current Campaign Result**
+```{r avgdur-vs-poutcome-baseon-y, fig.width=7, fig.height=5}
+avg_dur_by_pout_baseon_y <- ggplot(clean_df, aes(x = poutcome, y = duration, fill = y)) +
+  geom_bar(stat = "summary", fun = "mean", position = "dodge") +
+  labs(
+    title = "Average Call Duration by Previous Outcome",
+    x = "Previous Outcome", 
+    y = "Average Call Duration (seconds)",
+    fill = "Subscribed Current Campaign?"
+  ) +
+  scale_fill_manual(values = c("no" = "orange", "yes" = "seagreen")) +
+  theme_minimal()
+
+ggplotly(avg_dur_by_pout_baseon_y)
+```
+**Explanation of Average Call Duration by Previous Outcome**  
+
+The graph above shows a clear relationship between previous campaign results and current call duration based on current campaign result. 
+Let's focus on customers who **subscribed (selected yes)** in the current campaign. 
+Contacts with a previous result of **“nonexistent” had the longest average call duration (around 476 seconds, about almost 8 minutes)**, followed by those with a **result of “failure” (approximately 402 seconds or 6 minutes)**, while **“successful” results show the shortest duration (approximately 345 seconds, or 5,75 minutes).**
+
+
+#### **Distribution of Average Age by Job based on Current Campaign Result **
+```{r}
+summary_yes <- clean_df %>%
+  filter(y == "yes") %>%
+  group_by(job) %>%
+  summarise(
+    count_yes = n(),
+    avg_age_yes = mean(age),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(count_yes))
+
+summary_of_yes <- ggplot(summary_yes, aes(x = reorder(job, -count_yes), y = count_yes, fill = avg_age_yes)) +
+  geom_bar(stat = "identity") +
+  labs(
+    title = "Number of Clients Chose Yes by Job and Their Average Age",
+    x = "Job",
+    y = "Number of 'Yes'",
+    fill = "Avg Age"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggplotly(summary_of_yes)
+```
+**Explanation Number of Clients Chose Yes by Job and Their Average Age**  
+The “admin” profession dominates with the highest number of subscribing clients **(around 270 clients)** and has an **average age of around 37 years.** This is followed by “technician” with around **160 subscribing clients who have an older average age (38 years).** The “blue-collar” profession in third place with around **137 clients and a relatively young average age as well (39 years).** The “retired” profession shows a unique trend—even though they only have 87 subscribers, they have the highest average age (66 years old).  
+
+#### **Bussiness Recommendation Based on graph**  
+
+1.  Focus marketing strategies on administrative and technical professions, as they show the highest response rates, while developing specific products for the retirement segment, which shows high loyalty despite its smaller size.  
+2.  Optimize Strategies for “Nonexistent” Clients. Although clients with no campaign history require the longest call duration, they show good conversion potential. Develop a more efficient and persuasive call script specifically for this segment, focusing on a more structured explanation of the value proposition.
